@@ -1,0 +1,6 @@
+{
+  "name": "Dashboard Monitoring Udara",
+  "description": "Sistem Monitoring Kualitas Udara UPT Puskesmas Bontang Utara 1",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
