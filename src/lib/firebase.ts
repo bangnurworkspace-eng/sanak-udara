@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, off, set, get } from 'firebase/database';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 export const firebaseConfig = {
   apiKey: "AIzaSyCYpc6RSzK7LSZacWSLttt7FEn8TMby9lY",
@@ -38,4 +38,4 @@ try {
   console.error("Failed to initialize Firebase:", error);
 }
 
-export { database, storage, ref, onValue, off, set, get, storageRef, uploadBytes, getDownloadURL };
+export { database, storage, ref, onValue, off, set, get, storageRef, uploadBytes, getDownloadURL, deleteObject };

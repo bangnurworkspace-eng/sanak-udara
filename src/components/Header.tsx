@@ -100,7 +100,7 @@ export function Header() {
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 max-w-[20%] sm:max-w-[25%] xl:max-w-[280px]">
           {activeLogos.map((logo, index) => (
             <img 
-              key={logo.id || index}
+              key={`${logo.id || index}_${logo.url}`}
               src={logo.url} 
               alt={`Logo ${index + 1}`} 
               referrerPolicy="no-referrer"

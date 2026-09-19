@@ -82,9 +82,9 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initial sync from local storage
-    const localData = getStoredSettings();
-    setSettings(localData);
+    // Initial sync from local storage cache for instant UI rendering
+    const cachedData = getStoredSettings();
+    setSettings(cachedData);
 
     if (!database) {
       setLoading(false);
@@ -94,39 +94,47 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     const settingsRef = ref(database, 'settings/institution');
     const unsubscribe = onValue(settingsRef, (snapshot) => {
       if (snapshot.exists()) {
-        const data = snapshot.val();
-        
-        // Dapatkan data local storage saat ini
-        const currentLocal = getStoredSettings();
+        const cloudData = snapshot.val();
+        if (cloudData && typeof cloudData === 'object') {
+          // FIREBASE IS THE SOURCE OF TRUTH:
+          // Build canonical logos list from cloudData (always maintaining the 4 slots structure)
+          const cloudLogos = Array.isArray(cloudData.logos) ? cloudData.logos : [];
+          const canonicalLogos: Logo[] = defaultSettings.logos.map((defLogo, idx) => {
+            const cLogo = cloudLogos[idx];
+            if (cLogo && typeof cLogo === 'object') {
+              return {
+                id: cLogo.id || defLogo.id,
+                url: typeof cLogo.url === 'string' ? cLogo.url : '',
+                active: typeof cLogo.active === 'boolean' ? cLogo.active : Boolean(cLogo.url),
+              };
+            }
+            return defLogo;
+          });
 
-        // Merge logic: jika firebase memiliki logo url, gunakan; 
-        // namun jika firebase kosong pada slot tertentu tetapi local memiliki url buatan user, pertahankan local!
-        let mergedLogos = defaultSettings.logos.map((defLogo, idx) => {
-          const cloudLogo = data.logos?.[idx];
-          const localLogo = currentLocal.logos?.[idx];
+          const canonicalSettings: InstitutionSettings = {
+            facilityName: typeof cloudData.facilityName === 'string' ? cloudData.facilityName : defaultSettings.facilityName,
+            departmentName: typeof cloudData.departmentName === 'string' ? cloudData.departmentName : defaultSettings.departmentName,
+            location: typeof cloudData.location === 'string' ? cloudData.location : defaultSettings.location,
+            dashboardTitle: typeof cloudData.dashboardTitle === 'string' ? cloudData.dashboardTitle : defaultSettings.dashboardTitle,
+            latitude: typeof cloudData.latitude === 'number' ? cloudData.latitude : defaultSettings.latitude,
+            longitude: typeof cloudData.longitude === 'number' ? cloudData.longitude : defaultSettings.longitude,
+            useLiveGps: cloudData.useLiveGps !== undefined ? Boolean(cloudData.useLiveGps) : defaultSettings.useLiveGps,
+            logos: canonicalLogos,
+          };
 
-          if (cloudLogo && cloudLogo.url) {
-            return { ...defLogo, ...cloudLogo };
-          }
-          if (localLogo && localLogo.url) {
-            return { ...defLogo, ...localLogo };
-          }
-          return cloudLogo ? { ...defLogo, ...cloudLogo } : defLogo;
-        });
-
-        const mergedSettings: InstitutionSettings = {
-          ...defaultSettings,
-          ...currentLocal,
-          ...data,
-          logos: mergedLogos,
-        };
-
-        setSettings(mergedSettings);
-        saveToLocalStorage(mergedSettings);
+          // Update both React State & localStorage CACHE
+          setSettings(canonicalSettings);
+          saveToLocalStorage(canonicalSettings);
+        }
+      } else {
+        // Firebase has no settings recorded yet:
+        // Use defaultSettings as baseline; never let divergent local data overwrite Firebase unprompted
+        setSettings(defaultSettings);
+        saveToLocalStorage(defaultSettings);
       }
       setLoading(false);
     }, (error) => {
-      console.warn("Gagal membaca pengaturan dari Firebase:", error);
+      console.warn("Gagal membaca pengaturan dari Firebase (menggunakan cache lokal):", error);
       setLoading(false);
     });
 
@@ -134,21 +142,19 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSettings = async (newSettings: InstitutionSettings) => {
-    // 1. Simpan ke local storage & state langsung (instan & permanen di browser)
+    // 1. Simpan ke local state & update cache lokal untuk feedback instan
     setSettings(newSettings);
     saveToLocalStorage(newSettings);
     
-    if (!database) {
-      return;
-    }
-    
-    // 2. Simpan ke Firebase Realtime Database
-    try {
-      const settingsRef = ref(database, 'settings/institution');
-      await set(settingsRef, newSettings);
-    } catch (error: any) {
-      console.warn("Gagal menyimpan ke Firebase Realtime Database:", error);
-      // Jangan lempar error jika hanya masalah aturan keamanan agar UI tetap sukses tersimpan secara lokal
+    // 2. Simpan ke Firebase Realtime Database sebagai sumber kebenaran utama
+    if (database) {
+      try {
+        const settingsRef = ref(database, 'settings/institution');
+        await set(settingsRef, newSettings);
+      } catch (error: any) {
+        console.error("Gagal menyimpan ke Firebase Realtime Database:", error);
+        throw error;
+      }
     }
   };
 

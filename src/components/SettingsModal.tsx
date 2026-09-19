@@ -2,7 +2,8 @@ import { useState, useRef, ChangeEvent, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Upload, Trash2, CheckCircle2, AlertCircle, MapPin, Navigation, RefreshCw, Image as ImageIcon, Lock, User, Key } from 'lucide-react';
 import { useInstitution, defaultSettings, InstitutionSettings, Logo } from '../contexts/InstitutionContext';
-import { optimizeLogoImage } from '../utils/imageUtils';
+import { optimizeLogoImage, optimizeLogoToBlob } from '../utils/imageUtils';
+import { storage, storageRef, uploadBytes, getDownloadURL, deleteObject } from '../lib/firebase';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -24,10 +25,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const handleLogin = (e: FormEvent) => {
     e.preventDefault();
-    const adminId = import.meta.env.VITE_ADMIN_ID || 'admin';
-    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123';
+    const adminId = (import.meta.env.VITE_ADMIN_ID && import.meta.env.VITE_ADMIN_ID !== '') ? import.meta.env.VITE_ADMIN_ID : 'sanak';
+    const adminPassword = (import.meta.env.VITE_ADMIN_PASSWORD && import.meta.env.VITE_ADMIN_PASSWORD !== '') ? import.meta.env.VITE_ADMIN_PASSWORD : 'bontanggueee';
 
-    if (loginId === adminId && loginPassword === adminPassword) {
+    if (loginId.trim() === adminId && loginPassword === adminPassword) {
       setIsAuthenticated(true);
       setLoginError('');
     } else {
@@ -60,19 +61,60 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // 1. Validasi file gambar
+    if (!file.type.startsWith('image/') && !file.name.match(/\.(png|jpe?g|svg|webp)$/i)) {
+      alert("Harap pilih file gambar yang valid (PNG, JPG, SVG, WebP).");
+      e.target.value = '';
+      return;
+    }
+
     setUploadingSlot(index);
     try {
-      // Optimasi gambar logo (menjaga transparansi PNG/SVG dan mengecilkan ukuran base64)
-      const optimizedUrl = await optimizeLogoImage(file, 400);
+      // 2. Kompres/optimalkan gambar (menjaga transparansi PNG/SVG dan dimensi max 400px)
+      const { blob, contentType, extension } = await optimizeLogoToBlob(file, 400);
 
-      setFormData(prev => {
-        const newLogos = [...prev.logos];
-        newLogos[index] = { ...newLogos[index], url: optimizedUrl, active: true };
-        return { ...prev, logos: newLogos };
-      });
+      let uploadedUrl = '';
+      const oldLogoUrl = formData.logos[index]?.url;
+
+      // 3. Upload ke Firebase Storage jika storage aktif
+      if (storage) {
+        const timestamp = Date.now();
+        const storagePath = `institution/logos/logo_${index + 1}_${timestamp}.${extension}`;
+        const fileRef = storageRef(storage, storagePath);
+
+        const uploadSnapshot = await uploadBytes(fileRef, blob, { contentType });
+        uploadedUrl = await getDownloadURL(uploadSnapshot.ref);
+      } else {
+        // Fallback ke data URL teroptimasi jika storage belum diaktifkan
+        uploadedUrl = await optimizeLogoImage(file, 400);
+      }
+
+      // 4. Update formData logos
+      const newLogos = [...formData.logos];
+      newLogos[index] = {
+        ...newLogos[index],
+        url: uploadedUrl,
+        active: true,
+      };
+
+      const updatedFormData: InstitutionSettings = { ...formData, logos: newLogos };
+      setFormData(updatedFormData);
+
+      // 5. Langsung simpan ke Firebase Realtime Database agar tersinkronisasi ke seluruh perangkat
+      await updateSettings(updatedFormData);
+
+      // 6. Hapus file logo lama di Firebase Storage jika ada dan berasal dari Firebase Storage
+      if (oldLogoUrl && storage && oldLogoUrl.includes('firebasestorage')) {
+        try {
+          const oldRef = storageRef(storage, oldLogoUrl);
+          deleteObject(oldRef).catch(() => {});
+        } catch {
+          // Abaikan error penghapusan file lama
+        }
+      }
     } catch (error) {
-      console.error("Error uploading logo:", error);
-      alert("Gagal memproses gambar logo. Pastikan format file PNG, JPEG, SVG, atau WebP.");
+      console.error("Error uploading logo to Firebase:", error);
+      alert("Gagal mengunggah logo. Pastikan koneksi internet stabil.");
     } finally {
       setUploadingSlot(null);
       e.target.value = '';
@@ -148,9 +190,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (confirm('Apakah Anda yakin ingin mengembalikan pengaturan ke konfigurasi awal?')) {
       setFormData(defaultSettings);
+      try {
+        await updateSettings(defaultSettings);
+      } catch (error) {
+        console.warn("Gagal mereset ke Firebase:", error);
+      }
     }
   };
 
