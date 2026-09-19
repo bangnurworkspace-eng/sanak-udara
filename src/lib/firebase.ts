@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, onValue, off, set, get } from 'firebase/database';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
@@ -14,13 +14,13 @@ export const firebaseConfig = {
 };
 
 // Initialize Firebase only if config is provided to avoid crashing the preview
-let app;
+let app: any;
 let database: ReturnType<typeof getDatabase> | null = null;
 let storage: ReturnType<typeof getStorage> | null = null;
 
 try {
   if (firebaseConfig.apiKey && firebaseConfig.databaseURL) {
-    app = initializeApp(firebaseConfig);
+    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     // Explicitly pass databaseURL to getDatabase to avoid region defaults failing on non-us-central regions
     database = getDatabase(app, firebaseConfig.databaseURL);
     

@@ -9,7 +9,7 @@ export function GaugeMeter({ value }: GaugeMeterProps) {
   const smoothValue = useSmoothValue(value ?? 0, 700);
 
   const getCategory = (val: number | null) => {
-    if (val === null) return { label: 'MENUNGGU DATA', color: '#94a3b8', bg: 'bg-slate-100 dark:bg-slate-800/80', text: 'text-slate-500 dark:text-slate-400', glow: 'rgba(148, 163, 184, 0.1)' };
+    if (val === null) return { label: 'DATA SENSOR TIDAK TERSEDIA', color: '#94a3b8', bg: 'bg-slate-100 dark:bg-slate-800/80', text: 'text-slate-500 dark:text-slate-400', glow: 'rgba(148, 163, 184, 0.1)' };
     if (val <= 50) return { label: 'BAIK', color: '#16a34a', bg: 'bg-green-50/90 dark:bg-green-900/30', text: 'text-green-600 dark:text-green-400', glow: 'rgba(22, 163, 74, 0.25)' }; // Hijau
     if (val <= 100) return { label: 'SEDANG', color: '#3b82f6', bg: 'bg-blue-50/90 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400', glow: 'rgba(59, 130, 246, 0.25)' }; // Biru
     if (val <= 200) return { label: 'TIDAK SEHAT', color: '#eab308', bg: 'bg-yellow-50/90 dark:bg-yellow-900/30', text: 'text-yellow-600 dark:text-yellow-400', glow: 'rgba(234, 179, 8, 0.25)' }; // Kuning

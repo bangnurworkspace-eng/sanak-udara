@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MapPin, Database, Clock, Activity, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
+import { id } from 'date-fns/locale';
 import { motion } from 'motion/react';
 import { useInstitution } from '../contexts/InstitutionContext';
 import { useGeolocation } from '../hooks/useGeolocation';
@@ -12,8 +13,41 @@ interface InfoPanelProps {
 
 export function InfoPanel({ updatedAt, isConnected }: InfoPanelProps) {
   const { settings } = useInstitution();
-  const date = updatedAt ? new Date(updatedAt) : new Date();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Normalisasi timestamp
+  const rawTimestamp = typeof updatedAt === 'string' ? Number(updatedAt) || null : updatedAt;
+  const timestampMs = rawTimestamp && rawTimestamp > 0 && rawTimestamp < 10000000000 ? rawTimestamp * 1000 : rawTimestamp;
+  const dateObj = timestampMs ? new Date(timestampMs) : null;
+  const isValidDate = dateObj && !isNaN(dateObj.getTime());
+
+  // Format waktu lokal WITA (UTC+8 / Bontang)
+  let formattedDateTime = '--';
+  let formattedClock = '--:--:--';
+  if (isValidDate) {
+    try {
+      const dStr = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Makassar',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(dateObj);
+
+      const tStr = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Makassar',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(dateObj).replace(/\./g, ':');
+
+      formattedDateTime = `${dStr}, ${tStr} WITA`;
+      formattedClock = `${tStr} WITA`;
+    } catch {
+      formattedDateTime = format(dateObj, 'd MMMM yyyy, HH:mm:ss', { locale: id }) + ' WITA';
+      formattedClock = format(dateObj, 'HH:mm:ss') + ' WITA';
+    }
+  }
 
   const {
     latitude,
@@ -123,30 +157,63 @@ export function InfoPanel({ updatedAt, isConnected }: InfoPanelProps) {
       {/* LIVE STATUS SECTION */}
       <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1.5 transition-colors duration-300 shrink-0">
         <div className="flex items-center justify-between">
-          <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full shadow-2xs border ${isConnected ? 'bg-green-50/90 dark:bg-green-900/30 border-green-200 dark:border-green-800/50' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-slate-400'}`}></div>
-            <span className={`font-black text-[8.5px] sm:text-[9px] tracking-wider uppercase ${isConnected ? 'text-green-700 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
-              {isConnected ? 'LIVE DATA' : 'TERAKHIR UPDATE'}
+          <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full shadow-2xs border transition-colors ${
+            isConnected 
+              ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/50' 
+              : 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/50'
+          }`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></div>
+            <span className={`font-black text-[8.5px] sm:text-[9px] tracking-wider uppercase ${
+              isConnected ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'
+            }`}>
+              {isConnected ? '🟢 ONLINE' : '🟡 OFFLINE'}
             </span>
           </div>
           <div className="text-right flex items-center gap-1.5">
-            <Clock className="w-3 h-3 text-slate-400" />
-            <span className={`text-xs font-black font-mono tracking-tight leading-none ${isConnected ? 'text-blue-700 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
-              {updatedAt ? format(date, 'HH:mm:ss') : '--:--:--'}
+            <Clock className={`w-3 h-3 ${isConnected ? 'text-slate-400' : 'text-amber-500/80'}`} />
+            <span className={`text-xs font-black font-mono tracking-tight leading-none ${
+              isConnected ? 'text-blue-700 dark:text-blue-400' : 'text-amber-800 dark:text-amber-300'
+            }`}>
+              {formattedClock}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 justify-between bg-slate-50 dark:bg-slate-900/50 px-2.5 py-1.5 rounded-lg border border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <Database className="w-3 h-3 text-slate-400 shrink-0" />
-            <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-600 dark:text-slate-300 truncate">Device Status</span>
+        <div className={`flex flex-col gap-1 px-2.5 py-1.5 rounded-lg border transition-colors duration-300 ${
+          isConnected 
+            ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-100/80 dark:border-emerald-900/30' 
+            : 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/70 dark:border-amber-900/40'
+        }`}>
+          <div className="flex items-center gap-2 justify-between">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Database className={`w-3 h-3 shrink-0 ${isConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`} />
+              <span className={`text-[9.5px] sm:text-[10px] font-bold truncate ${
+                isConnected ? 'text-slate-700 dark:text-slate-200' : 'text-amber-900 dark:text-amber-200'
+              }`}>
+                {isConnected ? 'Status Perangkat ESP32' : '🟡 PERANGKAT OFFLINE'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></div>
+              <span className={`text-[8.5px] sm:text-[9px] font-black tracking-wider uppercase ${
+                isConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+              }`}>
+                {isConnected ? 'ONLINE' : 'OFFLINE'}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className={`text-[8.5px] sm:text-[9px] font-bold tracking-wider uppercase ${isConnected ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {isConnected ? 'ONLINE' : 'OFFLINE'}
-            </span>
+
+          <div className="flex flex-col">
+            <p className={`text-[8.5px] sm:text-[9px] font-medium leading-tight ${
+              isConnected ? 'text-emerald-700/90 dark:text-emerald-400/90' : 'text-amber-800 dark:text-amber-300'
+            }`}>
+              {isConnected ? 'Data diperbarui secara realtime.' : 'Menampilkan data terakhir yang diterima'}
+            </p>
+            {!isConnected && updatedAt && (
+              <p className="text-[7.5px] sm:text-[8px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 leading-tight">
+                Terakhir diperbarui: {formattedDateTime}
+              </p>
+            )}
           </div>
         </div>
       </div>

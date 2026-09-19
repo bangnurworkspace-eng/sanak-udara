@@ -79,7 +79,7 @@ const InstitutionContext = createContext<InstitutionContextProps | undefined>(un
 
 export function InstitutionProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<InstitutionSettings>(() => getStoredSettings());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // Initial sync from local storage cache for instant UI rendering
@@ -93,46 +93,51 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
 
     const settingsRef = ref(database, 'settings/institution');
     const unsubscribe = onValue(settingsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const cloudData = snapshot.val();
-        if (cloudData && typeof cloudData === 'object') {
-          // FIREBASE IS THE SOURCE OF TRUTH:
-          // Build canonical logos list from cloudData (always maintaining the 4 slots structure)
-          const cloudLogos = Array.isArray(cloudData.logos) ? cloudData.logos : [];
-          const canonicalLogos: Logo[] = defaultSettings.logos.map((defLogo, idx) => {
-            const cLogo = cloudLogos[idx];
-            if (cLogo && typeof cLogo === 'object') {
-              return {
-                id: cLogo.id || defLogo.id,
-                url: typeof cLogo.url === 'string' ? cLogo.url : '',
-                active: typeof cLogo.active === 'boolean' ? cLogo.active : Boolean(cLogo.url),
-              };
-            }
-            return defLogo;
-          });
+      try {
+        if (snapshot.exists()) {
+          const cloudData = snapshot.val();
+          if (cloudData && typeof cloudData === 'object') {
+            // FIREBASE IS THE SOURCE OF TRUTH:
+            // Build canonical logos list from cloudData (always maintaining the 4 slots structure)
+            const cloudLogos = Array.isArray(cloudData.logos) ? cloudData.logos : [];
+            const canonicalLogos: Logo[] = defaultSettings.logos.map((defLogo, idx) => {
+              const cLogo = cloudLogos[idx];
+              if (cLogo && typeof cLogo === 'object') {
+                return {
+                  id: cLogo.id || defLogo.id,
+                  url: typeof cLogo.url === 'string' ? cLogo.url : '',
+                  active: typeof cLogo.active === 'boolean' ? cLogo.active : Boolean(cLogo.url),
+                };
+              }
+              return defLogo;
+            });
 
-          const canonicalSettings: InstitutionSettings = {
-            facilityName: typeof cloudData.facilityName === 'string' ? cloudData.facilityName : defaultSettings.facilityName,
-            departmentName: typeof cloudData.departmentName === 'string' ? cloudData.departmentName : defaultSettings.departmentName,
-            location: typeof cloudData.location === 'string' ? cloudData.location : defaultSettings.location,
-            dashboardTitle: typeof cloudData.dashboardTitle === 'string' ? cloudData.dashboardTitle : defaultSettings.dashboardTitle,
-            latitude: typeof cloudData.latitude === 'number' ? cloudData.latitude : defaultSettings.latitude,
-            longitude: typeof cloudData.longitude === 'number' ? cloudData.longitude : defaultSettings.longitude,
-            useLiveGps: cloudData.useLiveGps !== undefined ? Boolean(cloudData.useLiveGps) : defaultSettings.useLiveGps,
-            logos: canonicalLogos,
-          };
+            const canonicalSettings: InstitutionSettings = {
+              facilityName: typeof cloudData.facilityName === 'string' ? cloudData.facilityName : defaultSettings.facilityName,
+              departmentName: typeof cloudData.departmentName === 'string' ? cloudData.departmentName : defaultSettings.departmentName,
+              location: typeof cloudData.location === 'string' ? cloudData.location : defaultSettings.location,
+              dashboardTitle: typeof cloudData.dashboardTitle === 'string' ? cloudData.dashboardTitle : defaultSettings.dashboardTitle,
+              latitude: typeof cloudData.latitude === 'number' ? cloudData.latitude : defaultSettings.latitude,
+              longitude: typeof cloudData.longitude === 'number' ? cloudData.longitude : defaultSettings.longitude,
+              useLiveGps: cloudData.useLiveGps !== undefined ? Boolean(cloudData.useLiveGps) : defaultSettings.useLiveGps,
+              logos: canonicalLogos,
+            };
 
-          // Update both React State & localStorage CACHE
-          setSettings(canonicalSettings);
-          saveToLocalStorage(canonicalSettings);
+            // Update both React State & localStorage CACHE
+            setSettings(canonicalSettings);
+            saveToLocalStorage(canonicalSettings);
+          }
+        } else {
+          // Firebase has no settings recorded yet:
+          // Use defaultSettings as baseline; never let divergent local data overwrite Firebase unprompted
+          setSettings(defaultSettings);
+          saveToLocalStorage(defaultSettings);
         }
-      } else {
-        // Firebase has no settings recorded yet:
-        // Use defaultSettings as baseline; never let divergent local data overwrite Firebase unprompted
-        setSettings(defaultSettings);
-        saveToLocalStorage(defaultSettings);
+      } catch (err) {
+        console.warn("Kesalahan membaca data pengaturan institusi dari Firebase:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }, (error) => {
       console.warn("Gagal membaca pengaturan dari Firebase (menggunakan cache lokal):", error);
       setLoading(false);
